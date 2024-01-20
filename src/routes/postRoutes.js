@@ -3,6 +3,9 @@ const router = express.Router();
 const User = require('../models/User');
 const Post = require('../models/Post');
 const Category = require('../models/Category');
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
 
 router.post('/new', (req, res) => {
     console.log(req.body)
@@ -153,5 +156,48 @@ router.get('/category/:slug', async (req, res) => {
     })
     
 });
+
+
+router.get('/video/:id', async (req, res) => {
+    const videoId = req.params.id;
+    const data = await Post.findById(videoId);
+    const videoUrl = data.video;
+    
+    try {
+        // Define a smaller range for the video to stream.
+        // For example, this will only request the first 512KB of the video:
+        const RANGE_SIZE = 200 * 1024; // 200KB
+        const rangeHeader = req.headers.range;
+        let start = 0;
+        let end = RANGE_SIZE;
+
+        if (rangeHeader) {
+            const parts = rangeHeader.replace(/bytes=/, "").split("-");
+            start = parseInt(parts[0], 10);
+            end = parts[1] ? parseInt(parts[1], 10) : start + RANGE_SIZE;
+        }
+
+        const response = await axios({
+            method: 'GET',
+            url: videoUrl,
+            responseType: 'stream',
+            headers: {
+                Range: `bytes=${start}-${end}`
+            }
+        });
+
+        res.writeHead(response.status, {
+            ...response.headers
+        });
+
+        // Stream the video from the remote URL to the client
+        response.data.pipe(res);
+    } catch (error) {
+        console.error("Error streaming the video: ", error);
+        res.sendStatus(500);
+    }
+});
+
+
 
 module.exports = router;
